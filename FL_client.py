@@ -1,8 +1,9 @@
-"""Flower ClientApp: local FeTS training and local held-out evaluation."""
-
 from __future__ import annotations
 
 import time
+from pathlib import Path
+
+import pandas as pd
 import torch
 from flwr.clientapp import ClientApp
 from flwr.common import ArrayRecord, Context, Message, MetricRecord, RecordDict
@@ -12,6 +13,18 @@ from ML_model import build_model
 from dataset import client_records, fets_region_metrics, make_loaders
 
 app = ClientApp()
+
+
+def _append_client_csv(context: Context, row: dict) -> None:
+    output_dir = Path(context.run_config.get("output-dir", "artifacts"))
+    strategy = str(context.run_config.get("strategy", "federated")).lower()
+    output_dir.mkdir(parents=True, exist_ok=True)
+    csv_file = output_dir / f"{strategy}_fets2022_client_history.csv"
+    df = pd.DataFrame([row])
+    if not csv_file.exists():
+        df.to_csv(csv_file, index=False, mode="w")
+    else:
+        df.to_csv(csv_file, index=False, mode="a", header=False)
 
 
 def _device(context: Context) -> torch.device:
@@ -88,6 +101,13 @@ def train(msg: Message, context: Context) -> Message:
         f"Loss: {loss:.4f} | Time: {elapsed:.2f}s | "
         f"Examples: {len(trainloader.dataset)}"
     )
+    _append_client_csv(context, {
+        "institution_id": f"{partition_index:02d}",
+        "phase": "train",
+        "loss": loss,
+        "time_sec": elapsed,
+        "examples": len(trainloader.dataset),
+    })
     metrics = MetricRecord({
         "train_loss": loss,
         "train_time_sec": elapsed,
@@ -136,6 +156,19 @@ def evaluate(msg: Message, context: Context) -> Message:
         f"HD95 (ET/TC/WT): {hd95_et:.2f} / {hd95_tc:.2f} / {hd95_wt:.2f} | "
         f"Time: {elapsed:.2f}s | Examples: {len(valloader.dataset)}"
     )
+    _append_client_csv(context, {
+        "institution_id": f"{partition_index:02d}",
+        "phase": "evaluate",
+        "loss": eval_loss,
+        "dice_et": dice_et,
+        "dice_tc": dice_tc,
+        "dice_wt": dice_wt,
+        "hd95_et": hd95_et,
+        "hd95_tc": hd95_tc,
+        "hd95_wt": hd95_wt,
+        "time_sec": elapsed,
+        "examples": len(valloader.dataset),
+    })
     metrics = MetricRecord({
         "eval_loss": eval_loss,
         "eval_dice_et": dice_et,
