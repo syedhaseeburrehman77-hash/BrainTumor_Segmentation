@@ -1,0 +1,35 @@
+# Virtual environments
+.venv
+.venv/
+.venv/**
+**/.venv/**
+venv/
+venv/**
+env/
+env/**
+
+# Python cache
+__pycache__/
+**/__pycache__/**
+*.py[cod]
+*.class
+
+# Large FeTS Datasets (keep outside FAB bundle)
+MICCAI_FeTS2022_TrainingData
+MICCAI_FeTS2022_TrainingData/
+MICCAI_FeTS2022_TrainingData/**
+MICCAI_FeTS2022_ValidationData
+MICCAI_FeTS2022_ValidationData/
+MICCAI_FeTS2022_ValidationData/**
+*.nii
+*.nii.gz
+
+# Artifacts & Checkpoints
+artifacts/
+artifacts/**
+*.pt
+*.pth
+
+# Flower cache
+.flwr/
+**/.flwr/**
