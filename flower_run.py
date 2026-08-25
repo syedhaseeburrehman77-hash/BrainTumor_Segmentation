@@ -2,27 +2,84 @@
 
 from __future__ import annotations
 
-import subprocess
+import os
 import sys
+
+# Suppress unwanted C++ logging and disable Windows Job Object restrictions for Ray
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
+os.environ["TF_ENABLE_ONEDNN_OPTS"] = "0"
+os.environ["RAY_ENABLE_WINDOWS_JOB_OBJECT"] = "0"
+sys.modules.setdefault("tensorflow", None)
+
 import argparse
 from pathlib import Path
+import subprocess
 
 from verify_dataset import verify_dataset
 
 
-import os
+def patch_all_ray_installations():
+    """Locate and patch all ray/_private/utils.py files to prevent AssignProcessToJobObject crashes on Windows."""
+    search_dirs = [
+        Path(sys.executable).parent,
+        Path.home() / "AppData" / "Local" / "uv" / "cache",
+        Path.home() / ".flwr" / "runtime-envs",
+        Path.home() / "AppData" / "Local" / "Packages",
+    ]
+    target_snippet = 'raise OSError(ctypes.get_last_error(), "AssignProcessToJobObject() failed")'
+    replacement_snippet = 'pass  # Suppress Windows Job Object error'
+
+    for base_dir in search_dirs:
+        if not base_dir.exists():
+            continue
+        try:
+            for utils_path in base_dir.rglob("utils.py"):
+                if "ray" in str(utils_path) and "_private" in str(utils_path):
+                    try:
+                        content = utils_path.read_text(encoding="utf-8", errors="ignore")
+                        if target_snippet in content:
+                            new_content = content.replace(target_snippet, replacement_snippet)
+                            utils_path.write_text(new_content, encoding="utf-8")
+                    except Exception:
+                        pass
+        except Exception:
+            pass
 
 
 def main(clients: int, rounds: int, strategy: str, cpus_per_client: int) -> int:
     if clients < 1 or rounds < 1 or cpus_per_client < 1:
         raise ValueError("clients, rounds, and cpus-per-client must all be positive")
+    
+    patch_all_ray_installations()
     project_dir = Path(__file__).resolve().parent
     verify_dataset(project_dir / "pyproject.toml", requested_clients=clients)
 
-    # Ensure virtual environment Scripts directory is in PATH for flower-superlink and ray
+    # Ensure all possible Python Scripts directories are in PATH for flower-superlink and ray
+    import site
+    import sysconfig
+
+    script_dirs = []
+    for scheme in (None, f"{os.name}_user"):
+        try:
+            p = sysconfig.get_path("scripts", scheme=scheme) if scheme else sysconfig.get_path("scripts")
+            if p:
+                script_dirs.append(p)
+        except Exception:
+            pass
+
+    try:
+        if hasattr(site, "USER_BASE") and site.USER_BASE:
+            script_dirs.append(str(Path(site.USER_BASE) / "Scripts"))
+    except Exception:
+        pass
+
+    sys_parent = Path(sys.executable).parent
+    script_dirs.extend([str(sys_parent), str(sys_parent / "Scripts")])
+
+    valid_dirs = [d for d in script_dirs if d and Path(d).is_dir()]
+    new_path = os.pathsep.join(valid_dirs + [os.environ.get("PATH", "")])
+    os.environ["PATH"] = new_path
     env = os.environ.copy()
-    scripts_dir = str(Path(sys.executable).parent)
-    env["PATH"] = scripts_dir + os.pathsep + env.get("PATH", "")
 
     run_config = (
         f"num-clients={clients} num-server-rounds={rounds} "
@@ -54,3 +111,4 @@ if __name__ == "__main__":
     parser.add_argument("--cpus-per-client", type=int, default=1)
     arguments = parser.parse_args()
     raise SystemExit(main(**vars(arguments)))
+

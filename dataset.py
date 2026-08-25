@@ -1,6 +1,12 @@
-"""FeTS 2022 discovery, institutional partitioning, transforms, and metrics."""
-
 from __future__ import annotations
+
+import os
+import sys
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
+os.environ["TF_ENABLE_ONEDNN_OPTS"] = "0"
+os.environ["RAY_ENABLE_WINDOWS_JOB_OBJECT"] = "0"
+sys.modules.setdefault("tensorflow", None)
 
 from pathlib import Path
 
