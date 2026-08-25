@@ -46,10 +46,29 @@ def patch_all_ray_installations():
             pass
 
 
+def cleanup_stale_flower_processes():
+    """Ensure no zombie SuperLink or Ray processes hold port 39093 or state locks on Windows."""
+    if sys.platform == "win32":
+        for proc in ("flower-superlink.exe", "flower-simulation.exe", "ray.exe", "raylet.exe"):
+            try:
+                subprocess.run(["taskkill", "/F", "/IM", proc, "/T"], capture_output=True, check=False)
+            except Exception:
+                pass
+
+    superlink_dir = Path.home() / ".flwr" / "local-superlink"
+    if superlink_dir.exists():
+        try:
+            import shutil
+            shutil.rmtree(superlink_dir, ignore_errors=True)
+        except Exception:
+            pass
+
+
 def main(clients: int, rounds: int, strategy: str, cpus_per_client: int) -> int:
     if clients < 1 or rounds < 1 or cpus_per_client < 1:
         raise ValueError("clients, rounds, and cpus-per-client must all be positive")
     
+    cleanup_stale_flower_processes()
     patch_all_ray_installations()
     project_dir = Path(__file__).resolve().parent
     verify_dataset(project_dir / "pyproject.toml", requested_clients=clients)
