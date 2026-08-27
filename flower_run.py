@@ -64,6 +64,43 @@ def cleanup_stale_flower_processes():
             pass
 
 
+STRATEGY_MENU = {
+    "1": "fedavg",
+    "2": "fedprox",
+    "3": "fedavgm",
+    "4": "fedadagrad",
+    "5": "fedadam",
+    "6": "fedyogi",
+    "7": "qfedavg",
+    "8": "fedmedian",
+    "9": "fedtrimmedavg",
+}
+
+
+def choose_strategy() -> str:
+    print("\n" + "=" * 45)
+    print("   Choose a Federated Learning Strategy:")
+    print("=" * 45)
+    print("  1. FedAvg        (Standard Weighted Average)")
+    print("  2. FedProx       (Heterogeneous Non-IID Regularizer)")
+    print("  3. FedAvgM       (Server Momentum)")
+    print("  4. FedAdagrad    (Adaptive Server Learning Rates)")
+    print("  5. FedAdam       (Adaptive 1st & 2nd Moments)")
+    print("  6. FedYogi       (Adaptive Variance Control)")
+    print("  7. QFedAvg       (Fairness-Oriented Weighting)")
+    print("  8. FedMedian     (Robust Coordinate-Wise Median)")
+    print("  9. FedTrimmedAvg (Robust Trimmed Mean)")
+    print("=" * 45)
+
+    while True:
+        choice = input("Enter choice (1-9): ").strip()
+        if choice in STRATEGY_MENU:
+            selected = STRATEGY_MENU[choice]
+            print(f"--> Selected Strategy: {selected.upper()}\n")
+            return selected
+        print("Invalid choice. Please enter a number from 1 to 9.")
+
+
 def main(clients: int, rounds: int, strategy: str, cpus_per_client: int, device: str = "auto") -> int:
     if clients < 1 or rounds < 1 or cpus_per_client < 1:
         raise ValueError("clients, rounds, and cpus-per-client must all be positive")
@@ -146,25 +183,20 @@ if __name__ == "__main__":
     parser.add_argument("--rounds", type=int, default=2, help="Number of Flower server rounds.")
     parser.add_argument(
         "--strategy",
-        choices=(
-            "fedavg",
-            "fedprox",
-            "fedavgm",
-            "fedadagrad",
-            "fedadam",
-            "fedyogi",
-            "qfedavg",
-            "fedmedian",
-            "fedtrimmedavg",
-        ),
-        default="fedavg",
-        help="Federated aggregation strategy to benchmark.",
+        choices=tuple(STRATEGY_MENU.values()),
+        default=None,
+        help="Optional: choose strategy directly without the menu.",
     )
     parser.add_argument("--cpus-per-client", type=int, default=1)
     parser.add_argument("--device", choices=("auto", "cuda", "cpu"), default="auto",
                         help="Device to use: 'auto' (checks CUDA first, else CPU), 'cuda', or 'cpu'.")
     arguments = parser.parse_args()
+
+    if arguments.strategy is None:
+        arguments.strategy = choose_strategy()
+
     raise SystemExit(main(**vars(arguments)))
+
 
 
 
