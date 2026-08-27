@@ -36,5 +36,5 @@ strategy = "fedavg"
 proximal-mu = 0.01
 cache-rate = 0.0
 seed = 42
-device = "cpu"
+device = "auto"
 num-workers = 0

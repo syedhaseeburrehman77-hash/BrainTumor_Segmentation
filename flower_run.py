@@ -64,7 +64,7 @@ def cleanup_stale_flower_processes():
             pass
 
 
-def main(clients: int, rounds: int, strategy: str, cpus_per_client: int) -> int:
+def main(clients: int, rounds: int, strategy: str, cpus_per_client: int, device: str = "auto") -> int:
     if clients < 1 or rounds < 1 or cpus_per_client < 1:
         raise ValueError("clients, rounds, and cpus-per-client must all be positive")
     
@@ -72,6 +72,24 @@ def main(clients: int, rounds: int, strategy: str, cpus_per_client: int) -> int:
     patch_all_ray_installations()
     project_dir = Path(__file__).resolve().parent
     verify_dataset(project_dir / "pyproject.toml", requested_clients=clients)
+
+    # Detect CUDA GPU availability first; fall back to CPU if unavailable
+    import torch
+    cuda_available = torch.cuda.is_available()
+    if device == "cuda" or (device == "auto" and cuda_available):
+        if not cuda_available:
+            print("[Hardware Detection] CUDA was explicitly requested but no NVIDIA GPU was found. Falling back to CPU.")
+            selected_device = "cpu"
+            gpus_per_client = 0.0
+        else:
+            device_name = torch.cuda.get_device_name(0)
+            print(f"[Hardware Detection] CUDA GPU detected: '{device_name}'. Acceleration ENABLED.")
+            selected_device = "cuda"
+            gpus_per_client = 1.0
+    else:
+        print("[Hardware Detection] CUDA not available (or CPU selected). Acceleration: CPU.")
+        selected_device = "cpu"
+        gpus_per_client = 0.0
 
     # Ensure all possible Python Scripts directories are in PATH for flower-superlink and ray
     import site
@@ -102,12 +120,12 @@ def main(clients: int, rounds: int, strategy: str, cpus_per_client: int) -> int:
 
     run_config = (
         f"num-clients={clients} num-server-rounds={rounds} "
-        f'strategy="{strategy}" device="cpu" num-workers=0'
+        f'strategy="{strategy}" device="{selected_device}" num-workers=0'
     )
     federation_config = (
         f"num-supernodes={clients} "
         f"client-resources-num-cpus={cpus_per_client} "
-        f"client-resources-num-gpus=0.0"
+        f"client-resources-num-gpus={gpus_per_client}"
     )
 
     return subprocess.call(
@@ -128,6 +146,9 @@ if __name__ == "__main__":
     parser.add_argument("--rounds", type=int, default=2, help="Number of Flower server rounds.")
     parser.add_argument("--strategy", choices=("fedavg", "fedprox"), default="fedavg")
     parser.add_argument("--cpus-per-client", type=int, default=1)
+    parser.add_argument("--device", choices=("auto", "cuda", "cpu"), default="auto",
+                        help="Device to use: 'auto' (checks CUDA first, else CPU), 'cuda', or 'cpu'.")
     arguments = parser.parse_args()
     raise SystemExit(main(**vars(arguments)))
+
 

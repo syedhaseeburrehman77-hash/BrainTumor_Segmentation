@@ -11,10 +11,20 @@ from ML_model import build_model
 from dataset import make_loaders, read_partitioning
 
 
-def main(data_root: str, partition_csv: str, epochs: int, batch_size: int, output: str, device: str) -> None:
+def main(data_root: str, partition_csv: str, epochs: int, batch_size: int, output: str, device: str = "auto") -> None:
     records = [record for _, group in read_partitioning(data_root, partition_csv) for record in group]
     trainloader, _ = make_loaders(records, batch_size=batch_size)
-    runtime_device = torch.device("cuda:0" if device == "cuda" and torch.cuda.is_available() else "cpu")
+    if device == "cuda" or (device == "auto" and torch.cuda.is_available()):
+        if torch.cuda.is_available():
+            runtime_device = torch.device("cuda:0")
+            print(f"[Device] Using CUDA GPU: '{torch.cuda.get_device_name(0)}'")
+        else:
+            runtime_device = torch.device("cpu")
+            print("[Device] CUDA requested but not found. Using CPU.")
+    else:
+        runtime_device = torch.device("cpu")
+        print("[Device] Using CPU.")
+
     model = build_model().to(runtime_device)
     optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4, weight_decay=1e-5)
     criterion = torch.nn.CrossEntropyLoss()
@@ -40,5 +50,5 @@ if __name__ == "__main__":
     parser.add_argument("--epochs", type=int, default=20)
     parser.add_argument("--batch-size", type=int, default=1)
     parser.add_argument("--output", default="artifacts/centralized_fets2022.pt")
-    parser.add_argument("--device", choices=("cpu", "cuda"), default="cpu")
+    parser.add_argument("--device", choices=("auto", "cpu", "cuda"), default="auto")
     main(**vars(parser.parse_args()))

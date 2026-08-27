@@ -36,12 +36,14 @@ def _append_client_csv(context: Context, row: dict) -> None:
 
 
 def _device(context: Context) -> torch.device:
-    """Use the configured device; CPU is the safe default for this project."""
-    requested = str(context.run_config["device"]).lower()
-    if requested == "cuda" and torch.cuda.is_available():
-        return torch.device("cuda:0")
-    if requested not in {"cpu", "cuda"}:
-        raise ValueError("device must be 'cpu' or 'cuda'")
+    """Check GPU/CUDA availability first; use CUDA if available, otherwise fall back to CPU."""
+    requested = str(context.run_config.get("device", "auto")).lower()
+    if requested in {"cuda", "auto"}:
+        if torch.cuda.is_available():
+            return torch.device("cuda:0")
+        elif requested == "cuda":
+            print("[Device Warning] CUDA requested but not found on this system. Falling back to CPU.")
+            return torch.device("cpu")
     return torch.device("cpu")
 
 
@@ -52,13 +54,14 @@ def _loaders(context: Context):
         context.run_config["partition-csv"],
         partition_index,
     )
+    device = _device(context)
     return make_loaders(
         records,
         batch_size=int(context.run_config["batch-size"]),
         cache_rate=float(context.run_config["cache-rate"]),
         seed=int(context.run_config["seed"]) + partition_index,
         num_workers=int(context.run_config["num-workers"]),
-        pin_memory=False,
+        pin_memory=(device.type == "cuda"),
     )
 
 
