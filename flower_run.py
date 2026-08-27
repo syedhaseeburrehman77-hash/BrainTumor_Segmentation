@@ -144,11 +144,27 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--clients", type=int, default=3, help="Use the first N real institution partitions (1-23).")
     parser.add_argument("--rounds", type=int, default=2, help="Number of Flower server rounds.")
-    parser.add_argument("--strategy", choices=("fedavg", "fedprox"), default="fedavg")
+    parser.add_argument(
+        "--strategy",
+        choices=(
+            "fedavg",
+            "fedprox",
+            "fedavgm",
+            "fedadagrad",
+            "fedadam",
+            "fedyogi",
+            "qfedavg",
+            "fedmedian",
+            "fedtrimmedavg",
+        ),
+        default="fedavg",
+        help="Federated aggregation strategy to benchmark.",
+    )
     parser.add_argument("--cpus-per-client", type=int, default=1)
     parser.add_argument("--device", choices=("auto", "cuda", "cpu"), default="auto",
                         help="Device to use: 'auto' (checks CUDA first, else CPU), 'cuda', or 'cpu'.")
     arguments = parser.parse_args()
     raise SystemExit(main(**vars(arguments)))
+
 
 

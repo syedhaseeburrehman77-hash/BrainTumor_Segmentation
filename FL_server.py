@@ -16,7 +16,17 @@ from flwr.common import ArrayRecord, ConfigRecord, Context
 from flwr.serverapp import Grid, ServerApp
 
 from ML_model import build_model
-from FL_methods import make_fedavg, make_fedprox
+from FL_methods import (
+    make_fedadagrad,
+    make_fedadam,
+    make_fedavg,
+    make_fedavgm,
+    make_fedmedian,
+    make_fedprox,
+    make_fedtrimmedavg,
+    make_fedyogi,
+    make_qfedavg,
+)
 
 app = ServerApp()
 
@@ -26,15 +36,60 @@ def main(grid: Grid, context: Context) -> None:
     config = context.run_config
     num_clients = int(config["num-clients"])
     strategy_name = str(config["strategy"]).lower()
+    fraction_train = float(config.get("fraction-train", 1.0))
+    fraction_evaluate = float(config.get("fraction-evaluate", 1.0))
+    learning_rate = float(config.get("learning-rate", 1e-4))
+    server_learning_rate = float(config.get("server-learning-rate", 1.0))
+
     if strategy_name == "fedavg":
-        strategy = make_fedavg(num_clients, float(config["fraction-train"]), float(config["fraction-evaluate"]))
+        strategy = make_fedavg(num_clients, fraction_train, fraction_evaluate)
     elif strategy_name == "fedprox":
         strategy = make_fedprox(
-            num_clients, float(config["fraction-train"]), float(config["fraction-evaluate"]),
-            float(config["proximal-mu"]),
+            num_clients, fraction_train, fraction_evaluate,
+            float(config.get("proximal-mu", 0.01)),
+        )
+    elif strategy_name == "fedavgm":
+        strategy = make_fedavgm(
+            num_clients, fraction_train, fraction_evaluate,
+            server_learning_rate, float(config.get("server-momentum", 0.9)),
+        )
+    elif strategy_name == "fedadagrad":
+        strategy = make_fedadagrad(
+            num_clients, fraction_train, fraction_evaluate,
+            server_learning_rate, learning_rate, float(config.get("fedopt-tau", 1e-3)),
+        )
+    elif strategy_name == "fedadam":
+        strategy = make_fedadam(
+            num_clients, fraction_train, fraction_evaluate,
+            server_learning_rate, learning_rate,
+            float(config.get("beta-1", 0.9)), float(config.get("beta-2", 0.99)),
+            float(config.get("fedopt-tau", 1e-3)),
+        )
+    elif strategy_name == "fedyogi":
+        strategy = make_fedyogi(
+            num_clients, fraction_train, fraction_evaluate,
+            server_learning_rate, learning_rate,
+            float(config.get("beta-1", 0.9)), float(config.get("beta-2", 0.99)),
+            float(config.get("fedopt-tau", 1e-3)),
+        )
+    elif strategy_name == "qfedavg":
+        strategy = make_qfedavg(
+            num_clients, fraction_train, fraction_evaluate,
+            learning_rate, float(config.get("qfedavg-q", 0.1)),
+        )
+    elif strategy_name == "fedmedian":
+        strategy = make_fedmedian(num_clients, fraction_train, fraction_evaluate)
+    elif strategy_name == "fedtrimmedavg":
+        strategy = make_fedtrimmedavg(
+            num_clients, fraction_train, fraction_evaluate,
+            float(config.get("trim-beta", 0.2)),
         )
     else:
-        raise ValueError("strategy must be either 'fedavg' or 'fedprox'")
+        raise ValueError(
+            f"Unsupported strategy '{strategy_name}'. Choose from: "
+            "'fedavg', 'fedprox', 'fedavgm', 'fedadagrad', 'fedadam', "
+            "'fedyogi', 'qfedavg', 'fedmedian', 'fedtrimmedavg'."
+        )
 
     initial_arrays = ArrayRecord(build_model().state_dict())
     result = strategy.start(
