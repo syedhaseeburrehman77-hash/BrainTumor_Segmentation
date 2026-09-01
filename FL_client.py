@@ -53,6 +53,8 @@ def _loaders(context: Context):
         context.run_config["data-root"],
         context.run_config["partition-csv"],
         partition_index,
+        global_test_fraction=float(context.run_config["global-test-fraction"]),
+        seed=int(context.run_config["seed"]),
     )
     device = _device(context)
     return make_loaders(
