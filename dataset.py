@@ -17,21 +17,11 @@ from monai.data import CacheDataset, DataLoader, Dataset
 from monai.metrics import DiceMetric, HausdorffDistanceMetric
 from monai.transforms import (
     Compose, CropForegroundd, EnsureChannelFirstd, EnsureTyped, LoadImaged,
-    MapTransform, NormalizeIntensityd, Orientationd, RandCropByPosNegLabeld,
+    MapLabelValued, NormalizeIntensityd, Orientationd, RandCropByPosNegLabeld,
     RandFlipd, RandRotate90d, Spacingd,
 )
 
 PATCH_SIZE = (96, 96, 96)
-
-class RemapFetsLabeld(MapTransform):
-    """Map FeTS labels {0,1,2,4} to contiguous network labels {0,1,2,3}."""
-
-    def __call__(self, data):
-        result = dict(data)
-        for key in self.keys:
-            label = result[key]
-            result[key] = torch.where(label == 4, torch.tensor(3, device=label.device), label)
-        return result
 
 
 def _case_files(subject_dir: Path, require_label: bool = True) -> dict:
@@ -85,7 +75,8 @@ def _train_transforms():
         Orientationd(keys=("image", "label"), axcodes="RAS"),
         Spacingd(keys=("image", "label"), pixdim=(1.0, 1.0, 1.0), mode=("bilinear", "nearest")),
         NormalizeIntensityd(keys="image", nonzero=True, channel_wise=True),
-        RemapFetsLabeld(keys="label"), CropForegroundd(keys=("image", "label"), source_key="image"),
+        MapLabelValued(keys="label", orig_labels=[4], target_labels=[3]),
+        CropForegroundd(keys=("image", "label"), source_key="image"),
         RandCropByPosNegLabeld(keys=("image", "label"), label_key="label", spatial_size=PATCH_SIZE,
                                pos=1, neg=1, num_samples=2, image_key="image", image_threshold=0),
         RandFlipd(keys=("image", "label"), prob=0.5, spatial_axis=0),
@@ -101,7 +92,8 @@ def _val_transforms():
         Orientationd(keys=("image", "label"), axcodes="RAS"),
         Spacingd(keys=("image", "label"), pixdim=(1.0, 1.0, 1.0), mode=("bilinear", "nearest")),
         NormalizeIntensityd(keys="image", nonzero=True, channel_wise=True),
-        RemapFetsLabeld(keys="label"), CropForegroundd(keys=("image", "label"), source_key="image"),
+        MapLabelValued(keys="label", orig_labels=[4], target_labels=[3]),
+        CropForegroundd(keys=("image", "label"), source_key="image"),
         EnsureTyped(keys=("image", "label")),
     ])
 
