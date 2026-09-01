@@ -62,11 +62,63 @@ def read_partitioning(data_root: str | Path, partition_csv: str | Path) -> list[
     return groups
 
 
-def client_records(data_root: str | Path, partition_csv: str | Path, partition_index: int) -> list[dict]:
+def _global_test_split(
+    records: list[dict],
+    global_test_fraction: float,
+    seed: int,
+) -> tuple[list[dict], list[dict]]:
+    """Reserve deterministic unseen cases from one institution for final global testing."""
+    if not 0.0 <= global_test_fraction < 1.0:
+        raise ValueError("global_test_fraction must be in [0.0, 1.0)")
+    if global_test_fraction == 0.0 or len(records) < 2:
+        return records, []
+
+    rng = np.random.default_rng(seed)
+    n_test = max(1, int(round(len(records) * global_test_fraction)))
+    test_indices = set(rng.permutation(len(records))[:n_test].tolist())
+    trainval = [record for index, record in enumerate(records) if index not in test_indices]
+    test = [record for index, record in enumerate(records) if index in test_indices]
+    return trainval, test
+
+
+# Global-test module: clients receive only train/validation cases, never final-test cases.
+def client_records(
+    data_root: str | Path,
+    partition_csv: str | Path,
+    partition_index: int,
+    global_test_fraction: float = 0.0,
+    seed: int = 42,
+) -> list[dict]:
     groups = read_partitioning(data_root, partition_csv)
     if not 0 <= partition_index < len(groups):
         raise IndexError(f"partition-id {partition_index} is invalid; dataset has {len(groups)} partitions")
-    return groups[partition_index][1]
+    trainval, _ = _global_test_split(
+        groups[partition_index][1],
+        global_test_fraction=global_test_fraction,
+        seed=seed + partition_index,
+    )
+    return trainval
+
+
+# Global-test module: collect every reserved unseen case after federated training completes.
+def global_test_records(
+    data_root: str | Path,
+    partition_csv: str | Path,
+    global_test_fraction: float,
+    seed: int = 42,
+) -> list[dict]:
+    groups = read_partitioning(data_root, partition_csv)
+    records = []
+    for partition_index, (_, institution_records) in enumerate(groups):
+        _, test = _global_test_split(
+            institution_records,
+            global_test_fraction=global_test_fraction,
+            seed=seed + partition_index,
+        )
+        records.extend(test)
+    if not records:
+        raise ValueError("Global test split contains no cases; increase global-test-fraction")
+    return records
 
 
 def _train_transforms():
@@ -127,6 +179,22 @@ def make_loaders(
     return (
         DataLoader(train_ds, batch_size=batch_size, shuffle=True, num_workers=num_workers, pin_memory=pin_memory),
         DataLoader(val_ds, batch_size=1, shuffle=False, num_workers=num_workers, pin_memory=pin_memory),
+    )
+
+
+# Global-test module: fixed full-volume loader without augmentation or a local split.
+def make_global_test_loader(
+    records: list[dict],
+    num_workers: int = 0,
+    pin_memory: bool = False,
+):
+    dataset = Dataset(records, transform=_val_transforms())
+    return DataLoader(
+        dataset,
+        batch_size=1,
+        shuffle=False,
+        num_workers=num_workers,
+        pin_memory=pin_memory,
     )
 
 
