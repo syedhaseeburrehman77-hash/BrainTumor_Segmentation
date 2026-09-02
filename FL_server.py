@@ -15,6 +15,7 @@ import torch
 from flwr.common import ArrayRecord, ConfigRecord, Context
 from flwr.serverapp import Grid, ServerApp
 from monai.inferers import sliding_window_inference
+from monai.losses import DiceCELoss
 
 from ML_model import build_model
 from FL_methods import build_strategy
@@ -38,7 +39,7 @@ def run_global_test(final_state_dict: dict, config) -> dict[str, float]:
         seed=int(config["seed"]),
     )
     loader = make_global_test_loader(records, num_workers=int(config["num-workers"]))
-    criterion = torch.nn.CrossEntropyLoss()
+    criterion = DiceCELoss(to_onehot_y=True, softmax=True)
     totals = {
         "test_loss": 0.0,
         "dice_et": 0.0, "dice_tc": 0.0, "dice_wt": 0.0,
@@ -52,9 +53,10 @@ def run_global_test(final_state_dict: dict, config) -> dict[str, float]:
             images = batch["image"].to(device)
             labels = batch["label"].to(device).long()
             logits = sliding_window_inference(images, roi_size=(96, 96, 96), sw_batch_size=1, predictor=model)
-            totals["test_loss"] += criterion(logits, labels.squeeze(1)).item()
+            totals["test_loss"] += criterion(logits, labels).item()
             for key, value in fets_region_metrics(logits, labels).items():
                 totals[key] += value
+
 
     count = max(len(loader), 1)
     results = {key: value / count for key, value in totals.items()}
