@@ -163,6 +163,7 @@ def build_strategy(strategy_name: str, config: dict, num_clients: int):
     fraction_evaluate = float(config.get("fraction-evaluate", 1.0))
     learning_rate = float(config.get("learning-rate", 1e-4))
     server_learning_rate = float(config.get("server-learning-rate", 1.0))
+    fedopt_eta = float(config.get("fedopt-eta", 0.1))
 
     if strategy_name == "fedavg":
         return make_fedavg(num_clients, fraction_train, fraction_evaluate)
@@ -171,12 +172,13 @@ def build_strategy(strategy_name: str, config: dict, num_clients: int):
     elif strategy_name == "fedavgm":
         return make_fedavgm(num_clients, fraction_train, fraction_evaluate, server_learning_rate, float(config.get("server-momentum", 0.9)))
     elif strategy_name == "fedadagrad":
-        return make_fedadagrad(num_clients, fraction_train, fraction_evaluate, server_learning_rate, learning_rate, float(config.get("fedopt-tau", 1e-3)))
+        return make_fedadagrad(num_clients, fraction_train, fraction_evaluate, fedopt_eta, learning_rate, float(config.get("fedopt-tau", 1e-3)))
     elif strategy_name == "fedadam":
-        return make_fedadam(num_clients, fraction_train, fraction_evaluate, server_learning_rate, learning_rate, float(config.get("beta-1", 0.9)), float(config.get("beta-2", 0.99)), float(config.get("fedopt-tau", 1e-3)))
+        return make_fedadam(num_clients, fraction_train, fraction_evaluate, fedopt_eta, learning_rate, float(config.get("beta-1", 0.9)), float(config.get("beta-2", 0.99)), float(config.get("fedopt-tau", 1e-3)))
     elif strategy_name == "fedyogi":
-        return make_fedyogi(num_clients, fraction_train, fraction_evaluate, server_learning_rate, learning_rate, float(config.get("beta-1", 0.9)), float(config.get("beta-2", 0.99)), float(config.get("fedopt-tau", 1e-3)))
+        return make_fedyogi(num_clients, fraction_train, fraction_evaluate, fedopt_eta, learning_rate, float(config.get("beta-1", 0.9)), float(config.get("beta-2", 0.99)), float(config.get("fedopt-tau", 1e-3)))
     elif strategy_name == "qfedavg":
+
         return make_qfedavg(num_clients, fraction_train, fraction_evaluate, learning_rate, float(config.get("qfedavg-q", 0.1)))
     elif strategy_name == "fedmedian":
         return make_fedmedian(num_clients, fraction_train, fraction_evaluate)
