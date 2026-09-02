@@ -64,3 +64,47 @@ For a pooled-data comparison only:
 python centralize_baseline.py --data-root "C:/.../TrainingData" --partition-csv "C:/.../partitioning_1.csv"
 
 It must not be used as the federated result.
+
+## Interactive Strategy Menu & 9 Baselines
+
+You can launch the runner interactively:
+
+    python flower_run.py --clients 3 --rounds 5
+
+An interactive numbered menu allows selecting any of Flower's 9 built-in strategies:
+1. `fedavg` - Standard weighted average
+2. `fedprox` - Heterogeneous non-IID regularizer
+3. `fedavgm` - Server-side momentum
+4. `fedadagrad` - Adaptive server learning rates
+5. `fedadam` - Adam-like server optimization
+6. `fedyogi` - Yogi-like adaptive variance control
+7. `qfedavg` - Fairness-oriented weighting
+8. `fedmedian` - Robust coordinate-wise median
+9. `fedtrimmedavg` - Robust trimmed mean
+
+You can also pass the strategy directly via CLI:
+
+    python flower_run.py --clients 3 --rounds 5 --strategy fedadam
+
+## Hardware Auto-Detection (GPU / CPU)
+
+The runner automatically checks for NVIDIA CUDA GPU availability:
+* If a CUDA device is detected, training runs on GPU (`cuda:0`).
+* If no CUDA device is present, it automatically falls back to CPU.
+* Override option: `--device auto`, `--device cuda`, or `--device cpu`.
+
+## Global Test Module
+
+To evaluate the final aggregated model on completely unseen data:
+* `global-test-fraction = 0.15` in `pyproject.toml` reserves 15% of cases from each institution.
+* Clients only receive the remaining 85% for local training and validation (zero data leakage).
+* After all federated rounds finish, the server runs a final evaluation on the reserved global test set.
+
+## Output Artifacts
+
+All training artifacts and logs are saved in `artifacts/`:
+* `artifacts/<strategy>_fets2022_final.pt`: Final model weights
+* `artifacts/<strategy>_fets2022_metrics.csv`: Round-by-round global federated metrics
+* `artifacts/<strategy>_fets2022_client_history.csv`: Per-institution training and validation metrics
+* `artifacts/<strategy>_fets2022_global_test.csv`: Final unseen global test results
+
