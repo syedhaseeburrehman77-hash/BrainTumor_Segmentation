@@ -5,7 +5,7 @@ description = "FeTS 2022 3D MRI federated segmentation with Flower"
 license = "Apache-2.0"
 requires-python = ">=3.11,<3.12"
 dependencies = [
-    "flwr[simulation]>=1.13.0",
+    "flwr[simulation]>=1.35.0",
     "torch>=2.1.0",
     "monai>=1.3.0",
     "nibabel>=5.2.0",
