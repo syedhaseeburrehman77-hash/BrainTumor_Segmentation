@@ -198,21 +198,63 @@ def make_global_test_loader(
     )
 
 
+MAX_BRATS_DISTANCE_MM = 373.13  # Diagonal distance penalty (240x240x155) for missed lesions
+
+
 def fets_region_metrics(logits: torch.Tensor, labels: torch.Tensor) -> dict[str, float]:
-    """Compute Dice/HD95 for ET, TC, WT from contiguous labels 0..3."""
+    """Compute Dice, HD95, and foreground voxel counts for ET, TC, WT.
+    
+    Empty predictions for present lesions are penalized with MAX_BRATS_DISTANCE_MM
+    rather than misleading 0.0 mm.
+    """
     prediction = torch.argmax(logits, dim=1)
     target = labels[:, 0] if labels.ndim == 5 else labels
-    pred_regions = torch.stack((prediction == 3, (prediction == 1) | (prediction == 3), prediction > 0), dim=1).float()
-    target_regions = torch.stack((target == 3, (target == 1) | (target == 3), target > 0), dim=1).float()
-    dice = DiceMetric(include_background=True, reduction="mean_batch")(pred_regions, target_regions).detach().cpu().numpy()
-    hd95 = HausdorffDistanceMetric(include_background=True, percentile=95, reduction="mean_batch")(pred_regions, target_regions).detach().cpu().numpy()
-    dice = np.nan_to_num(dice, nan=0.0, posinf=0.0, neginf=0.0).flatten()
-    hd95 = np.nan_to_num(hd95, nan=0.0, posinf=0.0, neginf=0.0).flatten()
-    return {
-        "dice_et": float(dice[0]),
-        "dice_tc": float(dice[1]),
-        "dice_wt": float(dice[2]),
-        "hd95_et": float(hd95[0]),
-        "hd95_tc": float(hd95[1]),
-        "hd95_wt": float(hd95[2]),
-    }
+
+    pred_et = (prediction == 3).float()
+    pred_tc = ((prediction == 1) | (prediction == 3)).float()
+    pred_wt = (prediction > 0).float()
+
+    target_et = (target == 3).float()
+    target_tc = ((target == 1) | (target == 3)).float()
+    target_wt = (target > 0).float()
+
+    pred_regions = torch.stack((pred_et, pred_tc, pred_wt), dim=1)
+    target_regions = torch.stack((target_et, target_tc, target_wt), dim=1)
+
+    dice_metric = DiceMetric(include_background=True, reduction="none")
+    dice_scores = dice_metric(pred_regions, target_regions).detach().cpu().numpy()
+
+    hd95_metric = HausdorffDistanceMetric(include_background=True, percentile=95, reduction="none")
+    hd95_scores = hd95_metric(pred_regions, target_regions).detach().cpu().numpy()
+
+    results = {}
+    region_names = ["et", "tc", "wt"]
+    for i, name in enumerate(region_names):
+        p_vox = float(pred_regions[:, i].sum().item())
+        t_vox = float(target_regions[:, i].sum().item())
+        results[f"pred_{name}_voxels"] = p_vox
+        results[f"target_{name}_voxels"] = t_vox
+
+        # Dice calculation
+        if t_vox == 0.0 and p_vox == 0.0:
+            d_val = 1.0
+        elif t_vox == 0.0 or p_vox == 0.0:
+            d_val = 0.0
+        else:
+            d_val = float(np.nan_to_num(dice_scores[:, i].mean(), nan=0.0))
+        results[f"dice_{name}"] = d_val
+
+        # HD95 calculation (penalize missed or false positive structures)
+        if t_vox == 0.0 and p_vox == 0.0:
+            h_val = 0.0
+        elif t_vox == 0.0 or p_vox == 0.0:
+            h_val = MAX_BRATS_DISTANCE_MM
+        else:
+            raw_h = float(hd95_scores[:, i].mean())
+            if np.isnan(raw_h) or np.isinf(raw_h):
+                h_val = MAX_BRATS_DISTANCE_MM
+            else:
+                h_val = raw_h
+        results[f"hd95_{name}"] = h_val
+
+    return results
