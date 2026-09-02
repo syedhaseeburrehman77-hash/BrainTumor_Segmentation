@@ -6,6 +6,7 @@ import argparse
 from pathlib import Path
 
 import torch
+from monai.losses import DiceCELoss
 
 from ML_model import build_model
 from dataset import make_loaders, read_partitioning
@@ -27,17 +28,18 @@ def main(data_root: str, partition_csv: str, epochs: int, batch_size: int, outpu
 
     model = build_model().to(runtime_device)
     optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4, weight_decay=1e-5)
-    criterion = torch.nn.CrossEntropyLoss()
+    criterion = DiceCELoss(to_onehot_y=True, softmax=True)
     for epoch in range(epochs):
         model.train()
         losses = []
         for batch in trainloader:
             optimizer.zero_grad(set_to_none=True)
             logits = model(batch["image"].to(runtime_device))
-            loss = criterion(logits, batch["label"].to(runtime_device).long().squeeze(1))
+            loss = criterion(logits, batch["label"].to(runtime_device).long())
             loss.backward()
             optimizer.step()
             losses.append(loss.item())
+
         print(f"epoch={epoch + 1}/{epochs} loss={sum(losses) / max(len(losses), 1):.4f}")
     Path(output).parent.mkdir(parents=True, exist_ok=True)
     torch.save(model.state_dict(), output)
