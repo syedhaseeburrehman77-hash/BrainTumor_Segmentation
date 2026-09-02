@@ -23,12 +23,35 @@ from dataset import client_records, fets_region_metrics, make_loaders
 app = ClientApp()
 
 
+CLIENT_CSV_COLUMNS = [
+    "institution_id",
+    "phase",
+    "loss",
+    "dice_et",
+    "dice_tc",
+    "dice_wt",
+    "hd95_et",
+    "hd95_tc",
+    "hd95_wt",
+    "pred_et_voxels",
+    "pred_tc_voxels",
+    "pred_wt_voxels",
+    "target_et_voxels",
+    "target_tc_voxels",
+    "target_wt_voxels",
+    "time_sec",
+    "examples",
+]
+
+
 def _append_client_csv(context: Context, row: dict) -> None:
     output_dir = Path(context.run_config.get("output-dir", "artifacts"))
     strategy = str(context.run_config.get("strategy", "federated")).lower()
     output_dir.mkdir(parents=True, exist_ok=True)
     csv_file = output_dir / f"{strategy}_fets2022_client_history.csv"
-    df = pd.DataFrame([row])
+    
+    full_row = {col: row.get(col, "") for col in CLIENT_CSV_COLUMNS}
+    df = pd.DataFrame([full_row], columns=CLIENT_CSV_COLUMNS)
     if not csv_file.exists():
         df.to_csv(csv_file, index=False, mode="w")
     else:
@@ -143,8 +166,13 @@ def evaluate(msg: Message, context: Context) -> Message:
     _, valloader = _loaders(context)
     model.eval()
     criterion = torch.nn.CrossEntropyLoss()
-    totals = {"loss": 0.0, "dice_et": 0.0, "dice_tc": 0.0, "dice_wt": 0.0,
-              "hd95_et": 0.0, "hd95_tc": 0.0, "hd95_wt": 0.0}
+    totals = {
+        "loss": 0.0,
+        "dice_et": 0.0, "dice_tc": 0.0, "dice_wt": 0.0,
+        "hd95_et": 0.0, "hd95_tc": 0.0, "hd95_wt": 0.0,
+        "pred_et_voxels": 0.0, "pred_tc_voxels": 0.0, "pred_wt_voxels": 0.0,
+        "target_et_voxels": 0.0, "target_tc_voxels": 0.0, "target_wt_voxels": 0.0,
+    }
     with torch.no_grad():
         for batch in valloader:
             images = batch["image"].to(device)
@@ -161,12 +189,15 @@ def evaluate(msg: Message, context: Context) -> Message:
     hd95_et = totals["hd95_et"] / count
     hd95_tc = totals["hd95_tc"] / count
     hd95_wt = totals["hd95_wt"] / count
+    pred_wt_vox = totals["pred_wt_voxels"] / count
+    target_wt_vox = totals["target_wt_voxels"] / count
     elapsed = time.time() - start_time
     print(
         f"[Institution {partition_index:02d}] Evaluation Finished | "
         f"Loss: {eval_loss:.4f} | "
         f"Dice (ET/TC/WT): {dice_et:.4f} / {dice_tc:.4f} / {dice_wt:.4f} | "
         f"HD95 (ET/TC/WT): {hd95_et:.2f} / {hd95_tc:.2f} / {hd95_wt:.2f} | "
+        f"Pred/Target WT Voxels: {pred_wt_vox:.0f} / {target_wt_vox:.0f} | "
         f"Time: {elapsed:.2f}s | Examples: {len(valloader.dataset)}"
     )
     _append_client_csv(context, {
@@ -179,6 +210,12 @@ def evaluate(msg: Message, context: Context) -> Message:
         "hd95_et": hd95_et,
         "hd95_tc": hd95_tc,
         "hd95_wt": hd95_wt,
+        "pred_et_voxels": totals["pred_et_voxels"] / count,
+        "pred_tc_voxels": totals["pred_tc_voxels"] / count,
+        "pred_wt_voxels": pred_wt_vox,
+        "target_et_voxels": totals["target_et_voxels"] / count,
+        "target_tc_voxels": totals["target_tc_voxels"] / count,
+        "target_wt_voxels": target_wt_vox,
         "time_sec": elapsed,
         "examples": len(valloader.dataset),
     })
@@ -190,7 +227,10 @@ def evaluate(msg: Message, context: Context) -> Message:
         "eval_hd95_et": hd95_et,
         "eval_hd95_tc": hd95_tc,
         "eval_hd95_wt": hd95_wt,
+        "eval_pred_wt_voxels": pred_wt_vox,
+        "eval_target_wt_voxels": target_wt_vox,
         "eval_time_sec": elapsed,
         "num-examples": len(valloader.dataset),
     })
     return Message(content=RecordDict({"metrics": metrics}), reply_to=msg)
+
