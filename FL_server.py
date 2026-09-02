@@ -39,8 +39,13 @@ def run_global_test(final_state_dict: dict, config) -> dict[str, float]:
     )
     loader = make_global_test_loader(records, num_workers=int(config["num-workers"]))
     criterion = torch.nn.CrossEntropyLoss()
-    totals = {"test_loss": 0.0, "dice_et": 0.0, "dice_tc": 0.0, "dice_wt": 0.0,
-              "hd95_et": 0.0, "hd95_tc": 0.0, "hd95_wt": 0.0}
+    totals = {
+        "test_loss": 0.0,
+        "dice_et": 0.0, "dice_tc": 0.0, "dice_wt": 0.0,
+        "hd95_et": 0.0, "hd95_tc": 0.0, "hd95_wt": 0.0,
+        "pred_et_voxels": 0.0, "pred_tc_voxels": 0.0, "pred_wt_voxels": 0.0,
+        "target_et_voxels": 0.0, "target_tc_voxels": 0.0, "target_wt_voxels": 0.0,
+    }
 
     with torch.no_grad():
         for batch in loader:
@@ -51,13 +56,20 @@ def run_global_test(final_state_dict: dict, config) -> dict[str, float]:
             for key, value in fets_region_metrics(logits, labels).items():
                 totals[key] += value
 
-    count = len(loader)
+    count = max(len(loader), 1)
     results = {key: value / count for key, value in totals.items()}
     results["test_examples"] = len(loader.dataset)
     output_file = Path(config["output-dir"]) / f"{str(config['strategy']).lower()}_fets2022_global_test.csv"
     pd.DataFrame([results]).to_csv(output_file, index=False)
+    print(
+        f"[Server] Final Unseen Global Test | Loss: {results['test_loss']:.4f} | "
+        f"Dice (ET/TC/WT): {results['dice_et']:.4f} / {results['dice_tc']:.4f} / {results['dice_wt']:.4f} | "
+        f"HD95 (ET/TC/WT): {results['hd95_et']:.2f} / {results['hd95_tc']:.2f} / {results['hd95_wt']:.2f} | "
+        f"Pred/Target WT Voxels: {results['pred_wt_voxels']:.0f} / {results['target_wt_voxels']:.0f}"
+    )
     print(f"[Server] Final unseen global-test results saved to: {output_file}")
     return results
+
 
 
 @app.main()
