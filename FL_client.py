@@ -16,6 +16,7 @@ import torch
 from flwr.clientapp import ClientApp
 from flwr.common import ArrayRecord, Context, Message, MetricRecord, RecordDict
 from monai.inferers import sliding_window_inference
+from monai.losses import DiceCELoss
 
 from ML_model import build_model
 from dataset import client_records, fets_region_metrics, make_loaders
@@ -93,14 +94,14 @@ def _loaders(context: Context):
 def _train_one_client(model, loader, epochs: int, lr: float, proximal_mu: float, device):
     model.train()
     optimizer = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=1e-5)
-    criterion = torch.nn.CrossEntropyLoss()
+    criterion = DiceCELoss(to_onehot_y=True, softmax=True)
     # FedProx compares locally updated weights with this received global model.
     global_params = [p.detach().clone() for p in model.parameters()]
     total_loss, steps = 0.0, 0
     for _ in range(epochs):
         for batch in loader:
             images = batch["image"].to(device)
-            labels = batch["label"].to(device).long().squeeze(1)
+            labels = batch["label"].to(device).long()
             optimizer.zero_grad(set_to_none=True)
             loss = criterion(model(images), labels)
             if proximal_mu > 0.0:
@@ -165,7 +166,7 @@ def evaluate(msg: Message, context: Context) -> Message:
     model.load_state_dict(msg.content["arrays"].to_torch_state_dict())
     _, valloader = _loaders(context)
     model.eval()
-    criterion = torch.nn.CrossEntropyLoss()
+    criterion = DiceCELoss(to_onehot_y=True, softmax=True)
     totals = {
         "loss": 0.0,
         "dice_et": 0.0, "dice_tc": 0.0, "dice_wt": 0.0,
@@ -178,7 +179,7 @@ def evaluate(msg: Message, context: Context) -> Message:
             images = batch["image"].to(device)
             labels = batch["label"].to(device).long()
             logits = sliding_window_inference(images, roi_size=(96, 96, 96), sw_batch_size=1, predictor=model)
-            totals["loss"] += criterion(logits, labels.squeeze(1)).item()
+            totals["loss"] += criterion(logits, labels).item()
             for key, value in fets_region_metrics(logits, labels).items():
                 totals[key] += value
     count = max(len(valloader), 1)
