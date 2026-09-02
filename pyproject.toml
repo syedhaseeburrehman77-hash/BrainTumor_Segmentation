@@ -38,6 +38,7 @@ strategy = "fedavg"
 proximal-mu = 0.01
 server-learning-rate = 1.0
 server-momentum = 0.9
+fedopt-eta = 0.1
 fedopt-tau = 0.001
 beta-1 = 0.9
 beta-2 = 0.99
@@ -47,4 +48,3 @@ cache-rate = 0.0
 seed = 42
 device = "auto"
 num-workers = 0
-
