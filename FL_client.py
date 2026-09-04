@@ -25,8 +25,10 @@ app = ClientApp()
 
 
 CLIENT_CSV_COLUMNS = [
+    "round",
     "institution_id",
     "phase",
+    "num_examples",
     "loss",
     "dice_et",
     "dice_tc",
@@ -41,15 +43,15 @@ CLIENT_CSV_COLUMNS = [
     "target_tc_voxels",
     "target_wt_voxels",
     "time_sec",
-    "examples",
 ]
 
 
-def _append_client_csv(context: Context, row: dict) -> None:
+def _append_client_csv(context: Context, partition_index: int, row: dict) -> None:
     output_dir = Path(context.run_config.get("output-dir", "artifacts"))
     strategy = str(context.run_config.get("strategy", "federated")).lower()
-    output_dir.mkdir(parents=True, exist_ok=True)
-    csv_file = output_dir / f"{strategy}_fets2022_client_history.csv"
+    tmp_dir = output_dir / "_client_metrics_tmp"
+    tmp_dir.mkdir(parents=True, exist_ok=True)
+    csv_file = tmp_dir / f"{strategy}_client_{partition_index:02d}.csv"
     
     full_row = {col: row.get(col, "") for col in CLIENT_CSV_COLUMNS}
     df = pd.DataFrame([full_row], columns=CLIENT_CSV_COLUMNS)
@@ -57,6 +59,7 @@ def _append_client_csv(context: Context, row: dict) -> None:
         df.to_csv(csv_file, index=False, mode="w")
     else:
         df.to_csv(csv_file, index=False, mode="a", header=False)
+
 
 
 def _device(context: Context) -> torch.device:
@@ -132,18 +135,20 @@ def train(msg: Message, context: Context) -> Message:
         proximal_mu=proximal_mu,
         device=device,
     )
+    current_round = int(msg.content.get("config", {}).get("server-round", msg.content.get("config", {}).get("current-round", 1)))
     elapsed = time.time() - start_time
     print(
         f"[Institution {partition_index:02d}] Training Finished | "
         f"Loss: {loss:.4f} | Time: {elapsed:.2f}s | "
         f"Examples: {len(trainloader.dataset)}"
     )
-    _append_client_csv(context, {
+    _append_client_csv(context, partition_index, {
+        "round": current_round,
         "institution_id": f"{partition_index:02d}",
         "phase": "train",
+        "num_examples": len(trainloader.dataset),
         "loss": loss,
         "time_sec": elapsed,
-        "examples": len(trainloader.dataset),
     })
     metrics = MetricRecord({
         "train_loss": loss,
@@ -192,6 +197,7 @@ def evaluate(msg: Message, context: Context) -> Message:
     hd95_wt = totals["hd95_wt"] / count
     pred_wt_vox = totals["pred_wt_voxels"] / count
     target_wt_vox = totals["target_wt_voxels"] / count
+    current_round = int(msg.content.get("config", {}).get("server-round", msg.content.get("config", {}).get("current-round", 1)))
     elapsed = time.time() - start_time
     print(
         f"[Institution {partition_index:02d}] Evaluation Finished | "
@@ -201,9 +207,11 @@ def evaluate(msg: Message, context: Context) -> Message:
         f"Pred/Target WT Voxels: {pred_wt_vox:.0f} / {target_wt_vox:.0f} | "
         f"Time: {elapsed:.2f}s | Examples: {len(valloader.dataset)}"
     )
-    _append_client_csv(context, {
+    _append_client_csv(context, partition_index, {
+        "round": current_round,
         "institution_id": f"{partition_index:02d}",
         "phase": "evaluate",
+        "num_examples": len(valloader.dataset),
         "loss": eval_loss,
         "dice_et": dice_et,
         "dice_tc": dice_tc,
@@ -218,7 +226,6 @@ def evaluate(msg: Message, context: Context) -> Message:
         "target_tc_voxels": totals["target_tc_voxels"] / count,
         "target_wt_voxels": target_wt_vox,
         "time_sec": elapsed,
-        "examples": len(valloader.dataset),
     })
     metrics = MetricRecord({
         "eval_loss": eval_loss,
@@ -234,4 +241,5 @@ def evaluate(msg: Message, context: Context) -> Message:
         "num-examples": len(valloader.dataset),
     })
     return Message(content=RecordDict({"metrics": metrics}), reply_to=msg)
+
 
