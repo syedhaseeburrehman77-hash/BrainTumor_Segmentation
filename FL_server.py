@@ -73,6 +73,36 @@ def run_global_test(final_state_dict: dict, config) -> dict[str, float]:
     return results
 
 
+def merge_client_history_csv(output_dir: Path, strategy_name: str) -> None:
+    """Merge per-institution temporary client CSVs into one final client history CSV."""
+    import shutil
+    tmp_dir = output_dir / "_client_metrics_tmp"
+    if not tmp_dir.exists():
+        return
+
+    csv_files = sorted(tmp_dir.glob(f"{strategy_name}_client_*.csv"))
+    if not csv_files:
+        return
+
+    dfs = [pd.read_csv(f) for f in csv_files if f.stat().st_size > 0]
+    if not dfs:
+        return
+
+    merged_df = pd.concat(dfs, ignore_index=True)
+    if "num_examples" in merged_df.columns and "phase" in merged_df.columns and "round" in merged_df.columns:
+        totals = merged_df.groupby(["round", "phase"])["num_examples"].transform("sum")
+        merged_df["aggregation_weight"] = (merged_df["num_examples"] / totals).round(6)
+
+    sort_cols = [c for c in ["round", "phase", "institution_id"] if c in merged_df.columns]
+    if sort_cols:
+        merged_df.sort_values(by=sort_cols, inplace=True)
+
+    final_csv = output_dir / f"{strategy_name}_fets2022_client_history.csv"
+    merged_df.to_csv(final_csv, index=False)
+    print(f"[Server] Institutional metrics merged into: {final_csv}")
+
+    shutil.rmtree(tmp_dir, ignore_errors=True)
+
 
 @app.main()
 def main(grid: Grid, context: Context) -> None:
@@ -97,6 +127,9 @@ def main(grid: Grid, context: Context) -> None:
     final_state_dict = result.arrays.to_torch_state_dict()
     torch.save(final_state_dict, model_checkpoint_path)
     print(f"\n[Server] Model checkpoint saved to: {model_checkpoint_path}")
+
+    # Merge per-institution temporary CSV files into final client history CSV
+    merge_client_history_csv(output_dir, strategy_name)
 
     # Global-test module: runs once after all federated rounds and client evaluations are complete.
     run_global_test(final_state_dict, config)
@@ -124,4 +157,3 @@ def main(grid: Grid, context: Context) -> None:
         print(df.to_string(index=False))
         print("=" * 78)
         print(f"[Server] Round results saved to CSV: {csv_path}\n")
-
