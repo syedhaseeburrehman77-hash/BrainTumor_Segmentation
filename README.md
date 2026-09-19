@@ -81,6 +81,7 @@ An interactive numbered menu allows selecting any of Flower's 9 built-in strateg
 8. `fedmedian` - Robust coordinate-wise median
 9. `fedtrimmedavg` - Robust trimmed mean
 10. `regsimagg` - Opt-in model-similarity and temporal aggregation
+11. `fedindar` - Local IN + EMD + Temporal Adaptive FedProx
 
 You can also pass the strategy directly via CLI:
 
@@ -107,6 +108,16 @@ Set the start threshold without editing code, for example:
     python flower_run.py --clients 3 --rounds 8 --strategy regsimagg --regsimagg-regularization-round 5 --device cpu
 
 This keeps rounds 1--5 as base RegSimAgg and starts temporal damping at round 6.
+
+### Comparison: RegSimAgg (Paper) vs. FedIN-EDAR (Proposed)
+
+| Feature | RegSimAgg (Paper) | FedIN-EDAR (Proposed) |
+|:---|:---|:---|
+| **Mechanism** | Server-side similarity and temporal weighting | Client personalization + dynamic client regularization |
+| **Personalization** | Shared global model across all clients | Institution-specific private InstanceNorm layers |
+| **Heterogeneity Handling** | Model parameter distance to centroid | Earth Mover's Distance (EMD) on regional tumor-burden distributions |
+| **Client Regularization** | None (standard local optimization) | Dynamic FedProx with drift-adaptive proximal penalty ($\mu$) |
+| **Transmitted Weights** | Entire network | Shared layers only (InstanceNorm remains local) |
 
 ## Hardware Auto-Detection (GPU / CPU)
 
