@@ -74,6 +74,8 @@ STRATEGY_MENU = {
     "7": "qfedavg",
     "8": "fedmedian",
     "9": "fedtrimmedavg",
+    "10": "regsimagg",
+    "11": "fedindar",
 }
 
 
@@ -90,18 +92,27 @@ def choose_strategy() -> str:
     print("  7. QFedAvg       (Fairness-Oriented Weighting)")
     print("  8. FedMedian     (Robust Coordinate-Wise Median)")
     print("  9. FedTrimmedAvg (Robust Trimmed Mean)")
+    print(" 10. RegSimAgg     (Similarity + Temporal Aggregation)")
+    print(" 11. FedIN-EDAR    (Local IN + EMD + Temporal Adaptive FedProx)")
     print("=" * 45)
 
     while True:
-        choice = input("Enter choice (1-9): ").strip()
+        choice = input("Enter choice (1-11): ").strip()
         if choice in STRATEGY_MENU:
             selected = STRATEGY_MENU[choice]
             print(f"--> Selected Strategy: {selected.upper()}\n")
             return selected
-        print("Invalid choice. Please enter a number from 1 to 9.")
+        print("Invalid choice. Please enter a number from 1 to 11.")
 
 
-def main(clients: int, rounds: int, strategy: str, cpus_per_client: int, device: str = "auto") -> int:
+def main(
+    clients: int,
+    rounds: int,
+    strategy: str,
+    cpus_per_client: int,
+    device: str = "auto",
+    regsimagg_regularization_round: int | None = None,
+) -> int:
     if clients < 1 or rounds < 1 or cpus_per_client < 1:
         raise ValueError("clients, rounds, and cpus-per-client must all be positive")
     
@@ -159,6 +170,10 @@ def main(clients: int, rounds: int, strategy: str, cpus_per_client: int, device:
         f"num-clients={clients} num-server-rounds={rounds} "
         f'strategy="{strategy}" device="{selected_device}" num-workers=0'
     )
+    if regsimagg_regularization_round is not None:
+        if regsimagg_regularization_round < 0:
+            raise ValueError("regsimagg-regularization-round must be non-negative")
+        run_config += f" regsimagg-regularization-round={regsimagg_regularization_round}"
     federation_config = (
         f"num-supernodes={clients} "
         f"client-resources-num-cpus={cpus_per_client} "
@@ -188,6 +203,12 @@ if __name__ == "__main__":
         help="Optional: choose strategy directly without the menu.",
     )
     parser.add_argument("--cpus-per-client", type=int, default=1)
+    parser.add_argument(
+        "--regsimagg-regularization-round",
+        type=int,
+        default=None,
+        help="Start RegSimAgg temporal damping after this round (for example, 5 starts at round 6).",
+    )
     parser.add_argument("--device", choices=("auto", "cuda", "cpu"), default="auto",
                         help="Device to use: 'auto' (checks CUDA first, else CPU), 'cuda', or 'cpu'.")
     arguments = parser.parse_args()
