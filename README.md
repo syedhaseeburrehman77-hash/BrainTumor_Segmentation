@@ -1,8 +1,7 @@
-# FeTS 2022: Flower FedAvg/FedProx
+# FeTS 2022: Flower Federated Segmentation
 
 This project uses Flower's current ClientApp, ServerApp, ArrayRecord, and
-built-in FedAvg/FedProx APIs. It does not implement a custom aggregation
-algorithm.
+built-in strategies plus an optional RegSimAgg aggregation strategy.
 
 ## Setup
 
@@ -25,8 +24,8 @@ On Windows PowerShell, create and activate an isolated Python 3.11 environment:
 3. Install. For a CPU-only Windows installation, install the official CPU
    wheel first:
 
-   pip install torch --index-url https://download.pytorch.org/whl/cpu
-   pip install -r requirements.txt
+   python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+   python -m pip install -r requirements.txt
 
 4. Verify the dataset:
 
@@ -65,7 +64,7 @@ python centralize_baseline.py --data-root "C:/.../TrainingData" --partition-csv 
 
 It must not be used as the federated result.
 
-## Interactive Strategy Menu & 9 Baselines
+## Interactive Strategy Menu & Strategies
 
 You can launch the runner interactively:
 
@@ -81,10 +80,33 @@ An interactive numbered menu allows selecting any of Flower's 9 built-in strateg
 7. `qfedavg` - Fairness-oriented weighting
 8. `fedmedian` - Robust coordinate-wise median
 9. `fedtrimmedavg` - Robust trimmed mean
+10. `regsimagg` - Opt-in model-similarity and temporal aggregation
 
 You can also pass the strategy directly via CLI:
 
     python flower_run.py --clients 3 --rounds 5 --strategy fedadam
+
+### RegSimAgg (opt-in)
+
+Run it without changing application code:
+
+    python flower_run.py --clients 3 --rounds 12 --strategy regsimagg
+
+RegSimAgg combines each client's normalized sample-size weight with a normalized
+model-similarity weight. After `regsimagg-regularization-round` (default `10`),
+it also down-weights a client update that has a large mean absolute change from
+the preceding global model. `regsimagg-distance-mode = "paper_l1"` is the
+recommended full-parameter L1 mode; `"github_compat"` is retained only to
+reproduce the supplied prototype's scalar-distance calculation.
+
+It does not transmit images, labels, patient identifiers, or extra client-side
+profiles. The server writes `artifacts/regsimagg_aggregation_audit.json`, which
+contains the per-round sample, similarity, temporal, and final weights.
+Set the start threshold without editing code, for example:
+
+    python flower_run.py --clients 3 --rounds 8 --strategy regsimagg --regsimagg-regularization-round 5 --device cpu
+
+This keeps rounds 1--5 as base RegSimAgg and starts temporal damping at round 6.
 
 ## Hardware Auto-Detection (GPU / CPU)
 
@@ -107,4 +129,5 @@ All training artifacts and logs are saved in `artifacts/`:
 * `artifacts/<strategy>_fets2022_metrics.csv`: Round-by-round global federated metrics
 * `artifacts/<strategy>_fets2022_client_history.csv`: Per-institution training and validation metrics
 * `artifacts/<strategy>_fets2022_global_test.csv`: Final unseen global test results
+* `artifacts/regsimagg_aggregation_audit.json`: RegSimAgg per-round aggregation audit
 
