@@ -1,4 +1,4 @@
-"""Factory for Flower's built-in strategies (no custom aggregation)."""
+"""Factory for Flower built-in strategies and the opt-in RegSimAgg strategy."""
 
 from __future__ import annotations
 
@@ -13,6 +13,8 @@ from flwr.serverapp.strategy import (
     FedYogi,
     QFedAvg,
 )
+from regsimagg_strategy import RegSimAggStrategy
+from fedind_dar_strategy import FedINDARStrategy
 
 
 def _common_settings(
@@ -156,6 +158,30 @@ def make_fedtrimmedavg(
     )
 
 
+def make_regsimagg(
+    num_clients: int,
+    fraction_train: float,
+    fraction_evaluate: float,
+    regularization_round: int,
+    distance_mode: str,
+) -> RegSimAggStrategy:
+    """RegSimAgg: sample-size, model-similarity, and temporal aggregation."""
+    return RegSimAggStrategy(
+        **_common_settings(num_clients, fraction_train, fraction_evaluate),
+        regularization_round=regularization_round,
+        distance_mode=distance_mode,
+    )
+
+
+def make_fedindar(num_clients, fraction_train, fraction_evaluate, optimization_rounds, base_mu, alpha, temporal_beta, min_mu, max_mu) -> FedINDARStrategy:
+    """FedIN-EDAR: local affine IN and dynamic EMD/update-aware FedProx."""
+    return FedINDARStrategy(
+        **_common_settings(num_clients, fraction_train, fraction_evaluate),
+        optimization_rounds=optimization_rounds, base_mu=base_mu, alpha=alpha,
+        temporal_beta=temporal_beta, min_mu=min_mu, max_mu=max_mu,
+    )
+
+
 def build_strategy(strategy_name: str, config: dict, num_clients: int):
     """Central factory dispatcher: builds the configured strategy from run_config."""
     strategy_name = strategy_name.lower()
@@ -184,11 +210,26 @@ def build_strategy(strategy_name: str, config: dict, num_clients: int):
         return make_fedmedian(num_clients, fraction_train, fraction_evaluate)
     elif strategy_name == "fedtrimmedavg":
         return make_fedtrimmedavg(num_clients, fraction_train, fraction_evaluate, float(config.get("trim-beta", 0.2)))
+    elif strategy_name == "regsimagg":
+        return make_regsimagg(
+            num_clients,
+            fraction_train,
+            fraction_evaluate,
+            int(config.get("regsimagg-regularization-round", 5)),
+            str(config.get("regsimagg-distance-mode", "paper_l1")),
+        )
+    elif strategy_name == "fedindar":
+        return make_fedindar(
+            num_clients, fraction_train, fraction_evaluate, int(config.get("num-server-rounds", 5)),
+            float(config.get("fedindar-base-mu", 0.01)), float(config.get("fedindar-alpha", 2.0)),
+            float(config.get("fedindar-temporal-beta", 0.5)), float(config.get("fedindar-min-mu", 0.001)),
+            float(config.get("fedindar-max-mu", 0.1)),
+        )
     else:
         raise ValueError(
             f"Unsupported strategy '{strategy_name}'. Choose from: "
             "'fedavg', 'fedprox', 'fedavgm', 'fedadagrad', 'fedadam', "
-            "'fedyogi', 'qfedavg', 'fedmedian', 'fedtrimmedavg'."
+            "'fedyogi', 'qfedavg', 'fedmedian', 'fedtrimmedavg', 'regsimagg', 'fedindar'."
         )
 
 
