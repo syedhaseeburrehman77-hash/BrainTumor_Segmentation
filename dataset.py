@@ -150,6 +150,17 @@ def _val_transforms():
     ])
 
 
+def _profile_transforms():
+    """Full-volume label preprocessing for FedIN-EDAR tumour-burden profiles."""
+    return Compose([
+        LoadImaged(keys=("label",)), EnsureChannelFirstd(keys=("label",)),
+        Orientationd(keys=("label",), axcodes="RAS"),
+        Spacingd(keys=("label",), pixdim=(1.0, 1.0, 1.0), mode=("nearest",)),
+        MapLabelValued(keys="label", orig_labels=[4], target_labels=[3]),
+        EnsureTyped(keys=("label",)),
+    ])
+
+
 def split_records(records: list[dict], validation_fraction: float = 0.15, seed: int = 42):
     """Deterministic local hold-out split; never mixes patients between institutions."""
     if len(records) < 2:
@@ -180,6 +191,19 @@ def make_loaders(
         DataLoader(train_ds, batch_size=batch_size, shuffle=True, num_workers=num_workers, pin_memory=pin_memory),
         DataLoader(val_ds, batch_size=1, shuffle=False, num_workers=num_workers, pin_memory=pin_memory),
     )
+
+
+def make_profile_loader(records: list[dict], seed: int = 42, num_workers: int = 0):
+    """Local train-label loader for the privacy-preserving profile setup round."""
+    train_records, _ = split_records(records, seed=seed)
+    return DataLoader(Dataset(train_records, transform=_profile_transforms()), batch_size=1, shuffle=False, num_workers=num_workers)
+
+
+def client_global_test_records(data_root, partition_csv, partition_index, global_test_fraction, seed: int = 42):
+    """Return one institution's held-out cases for personalized FedIN evaluation."""
+    groups = read_partitioning(data_root, partition_csv)
+    _, test = _global_test_split(groups[partition_index][1], global_test_fraction, seed + partition_index)
+    return test
 
 
 # Global-test module: fixed full-volume loader without augmentation or a local split.
