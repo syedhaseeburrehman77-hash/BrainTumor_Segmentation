@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import sys
+import json
 
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 os.environ["TF_ENABLE_ONEDNN_OPTS"] = "0"
@@ -113,11 +114,15 @@ def main(grid: Grid, context: Context) -> None:
 
 
     initial_arrays = ArrayRecord(build_model().state_dict())
+    num_rounds = int(config["num-server-rounds"])
+    # Flower round 1 is FedIN-EDAR profile exchange; CLI rounds stay optimization rounds.
+    if strategy_name == "fedindar":
+        num_rounds += 1
     result = strategy.start(
         grid=grid,
         initial_arrays=initial_arrays,
         train_config=ConfigRecord({"lr": float(config["learning-rate"])}),
-        num_rounds=int(config["num-server-rounds"]),
+        num_rounds=num_rounds,
     )
     output_dir = Path(config["output-dir"])
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -128,11 +133,24 @@ def main(grid: Grid, context: Context) -> None:
     torch.save(final_state_dict, model_checkpoint_path)
     print(f"\n[Server] Model checkpoint saved to: {model_checkpoint_path}")
 
+    if strategy_name == "regsimagg" and getattr(strategy, "aggregation_audit", None):
+        audit_path = output_dir / "regsimagg_aggregation_audit.json"
+        audit_path.write_text(json.dumps(strategy.aggregation_audit, indent=2), encoding="utf-8")
+        print(f"[Server] RegSimAgg aggregation audit saved to: {audit_path}")
+    if strategy_name == "fedindar":
+        audit_path = output_dir / "fedindar_audit.json"
+        audit_path.write_text(json.dumps({
+            "profile_phase": getattr(strategy, "profile_audit", []),
+            "optimization_rounds": getattr(strategy, "round_audit", []),
+        }, indent=2), encoding="utf-8")
+        print(f"[Server] FedIN-EDAR audit saved to: {audit_path}")
+
     # Merge per-institution temporary CSV files into final client history CSV
     merge_client_history_csv(output_dir, strategy_name)
 
     # Global-test module: runs once after all federated rounds and client evaluations are complete.
-    run_global_test(final_state_dict, config)
+    if strategy_name != "fedindar":
+        run_global_test(final_state_dict, config)
 
     # Build and save round-by-round metrics to CSV
     rows = []
@@ -157,3 +175,9 @@ def main(grid: Grid, context: Context) -> None:
         print(df.to_string(index=False))
         print("=" * 78)
         print(f"[Server] Round results saved to CSV: {csv_path}\n")
+
+    if strategy_name == "fedindar" and num_rounds in result.evaluate_metrics_clientapp:
+        personalized = dict(result.evaluate_metrics_clientapp[num_rounds])
+        personalized["flower_round"] = num_rounds
+        personalized["optimization_rounds"] = int(config["num-server-rounds"])
+        pd.DataFrame([personalized]).to_csv(output_dir / "fedindar_personalized_global_test.csv", index=False)
