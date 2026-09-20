@@ -8,15 +8,19 @@ from pathlib import Path
 from dataset import read_partitioning
 
 
-def verify_dataset(pyproject_path: str | Path = "pyproject.toml", requested_clients: int | None = None) -> None:
+def verify_dataset(
+    pyproject_path: str | Path = "pyproject.toml",
+    requested_clients: int | None = None,
+    partition_csv: str | Path | None = None,
+) -> None:
     config_path = Path(pyproject_path)
     config = tomllib.loads(config_path.read_text(encoding="utf-8"))["tool"]["flwr"]["app"]["config"]
     root = Path(config["data-root"])
-    csv_path = Path(config["partition-csv"])
+    csv_path = Path(partition_csv) if partition_csv is not None else Path(config["partition-csv"])
     if not root.is_dir():
         raise FileNotFoundError(f"Set data-root in {config_path} to the extracted FeTS training-data directory: {root}")
     if not csv_path.is_file():
-        raise FileNotFoundError(f"Set partition-csv in {config_path} to partitioning_1.csv: {csv_path}")
+        raise FileNotFoundError(f"Set partition-csv to an official FeTS partition CSV: {csv_path}")
     partitions = read_partitioning(root, csv_path)
     clients = int(config["num-clients"]) if requested_clients is None else requested_clients
     if not 1 <= clients <= len(partitions):

@@ -145,6 +145,12 @@ def main(grid: Grid, context: Context) -> None:
         }, indent=2), encoding="utf-8")
         print(f"[Server] FedIN-EDAR audit saved to: {audit_path}")
 
+    selection_history = getattr(strategy, "collaborator_selection_audit", None)
+    if selection_history is not None:
+        audit_path = output_dir / "collaborator_selection_audit.json"
+        audit_path.write_text(json.dumps(selection_history, indent=2), encoding="utf-8")
+        print(f"[Server] Collaborator selection audit saved to: {audit_path}")
+
     # Merge per-institution temporary CSV files into final client history CSV
     merge_client_history_csv(output_dir, strategy_name)
 

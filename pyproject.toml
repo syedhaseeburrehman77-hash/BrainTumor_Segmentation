@@ -34,6 +34,10 @@ batch-size = 1
 learning-rate = 0.0001
 fraction-train = 1.0
 fraction-evaluate = 1.0
+# Fixed is the default. Sliding reproduces paper-style partial participation.
+collaborator-selector = "fixed"
+collaborator-fraction = 0.2
+collaborator-selector-seed = 42
 strategy = "fedavg"
 proximal-mu = 0.01
 server-learning-rate = 1.0

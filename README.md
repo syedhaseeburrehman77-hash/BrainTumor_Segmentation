@@ -40,6 +40,19 @@ partitioning_1.csv, and rounds controls the number of Flower server rounds.
 The runner configures CPU-only virtual SuperNodes and then invokes Flower with
 streaming logs. Start with one client and one round to validate memory use.
 
+### Optional collaborator selection for Partition 2
+
+Fixed clients are the default: the requested institutions train every round.
+For paper-style partial participation, start all Partition-2 institutions and
+rotate a reproducible 20% window each training round:
+
+    python flower_run.py --clients 33 --rounds 20 --strategy regsimagg --device cpu --partition-csv "C:/Users/syedh/Documents/BraT_Segmentation_FeTs2022/MICCAI_FeTS2022_TrainingData/partitioning_2.csv" --collaborator-selector sliding --collaborator-fraction 0.2 --collaborator-selector-seed 42
+
+This selects six of 33 institutions per round. The server saves the selected
+Flower nodes in `artifacts/collaborator_selection_audit.json`. FedIN-EDAR
+profiles every institution in its setup round, then uses the same rotating
+selection during optimization.
+
 ## Strategy selection
 
 strategy = "fedavg" selects Flower's built-in FedAvg.

@@ -112,6 +112,10 @@ def main(
     cpus_per_client: int,
     device: str = "auto",
     regsimagg_regularization_round: int | None = None,
+    collaborator_selector: str = "fixed",
+    collaborator_fraction: float = 0.2,
+    collaborator_selector_seed: int = 42,
+    partition_csv: str | None = None,
 ) -> int:
     if clients < 1 or rounds < 1 or cpus_per_client < 1:
         raise ValueError("clients, rounds, and cpus-per-client must all be positive")
@@ -119,7 +123,11 @@ def main(
     cleanup_stale_flower_processes()
     patch_all_ray_installations()
     project_dir = Path(__file__).resolve().parent
-    verify_dataset(project_dir / "pyproject.toml", requested_clients=clients)
+    if collaborator_selector not in {"fixed", "sliding"}:
+        raise ValueError("collaborator-selector must be 'fixed' or 'sliding'")
+    if not 0.0 < collaborator_fraction <= 1.0:
+        raise ValueError("collaborator-fraction must be in (0, 1]")
+    verify_dataset(project_dir / "pyproject.toml", requested_clients=clients, partition_csv=partition_csv)
 
     # Detect CUDA GPU availability first; fall back to CPU if unavailable
     import torch
@@ -168,8 +176,13 @@ def main(
 
     run_config = (
         f"num-clients={clients} num-server-rounds={rounds} "
-        f'strategy="{strategy}" device="{selected_device}" num-workers=0'
+        f'strategy="{strategy}" device="{selected_device}" num-workers=0 '
+        f'collaborator-selector="{collaborator_selector}" '
+        f"collaborator-fraction={collaborator_fraction} "
+        f"collaborator-selector-seed={collaborator_selector_seed}"
     )
+    if partition_csv is not None:
+        run_config += f' partition-csv="{Path(partition_csv).resolve().as_posix()}"'
     if regsimagg_regularization_round is not None:
         if regsimagg_regularization_round < 0:
             raise ValueError("regsimagg-regularization-round must be non-negative")
@@ -209,6 +222,13 @@ if __name__ == "__main__":
         default=None,
         help="Start RegSimAgg temporal damping after this round (for example, 5 starts at round 6).",
     )
+    parser.add_argument("--collaborator-selector", choices=("fixed", "sliding"), default="fixed",
+                        help="fixed: all selected clients train; sliding: rotate a client window each round.")
+    parser.add_argument("--collaborator-fraction", type=float, default=0.2,
+                        help="Training fraction per sliding round; 0.2 selects six of 33 clients.")
+    parser.add_argument("--collaborator-selector-seed", type=int, default=42)
+    parser.add_argument("--partition-csv", type=str, default=None,
+                        help="Optional partitioning_1.csv or partitioning_2.csv override.")
     parser.add_argument("--device", choices=("auto", "cuda", "cpu"), default="auto",
                         help="Device to use: 'auto' (checks CUDA first, else CPU), 'cuda', or 'cpu'.")
     arguments = parser.parse_args()
