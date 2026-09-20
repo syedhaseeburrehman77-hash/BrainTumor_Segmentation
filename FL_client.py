@@ -47,6 +47,16 @@ CLIENT_CSV_COLUMNS = [
     "proximal_mu",
 ]
 
+# Tumour burden is the foreground-volume ratio in a complete 3D MRI volume.
+# Uniform bins over [0, 1] place virtually every FeTS WT/TC/ET case in bin 0,
+# which makes EMD zero for all institutions. These fixed log-scale edges retain
+# privacy while separating small and large tumour burdens consistently at every
+# client. There are ten bins, matching fedind_dar_strategy.PROFILE_BINS.
+TUMOR_BURDEN_BIN_EDGES = np.asarray(
+    [0.0, 1e-6, 3e-6, 1e-5, 3e-5, 1e-4, 3e-4, 1e-3, 3e-3, 1e-2, np.inf],
+    dtype=np.float64,
+)
+
 
 def _append_client_csv(context: Context, partition_index: int, row: dict) -> None:
     output_dir = Path(context.run_config.get("output-dir", "artifacts"))
@@ -130,8 +140,12 @@ def _tumor_burden_profile(context: Context, partition_index: int) -> tuple[dict[
                    "tc": float(((target == 1) | (target == 3)).float().mean()),
                    "et": float((target == 3).float().mean())}
         for region, burden in burdens.items():
-            histograms[region][min(int(burden * 10), 9)] += 1.0
-    return {region: values / values.sum() for region, values in histograms.items()}, max(len(loader.dataset), 1)
+            bin_index = int(np.searchsorted(TUMOR_BURDEN_BIN_EDGES, burden, side="right") - 1)
+            histograms[region][np.clip(bin_index, 0, len(histograms[region]) - 1)] += 1.0
+    return {
+        region: values / max(values.sum(), 1.0)
+        for region, values in histograms.items()
+    }, max(len(loader.dataset), 1)
 
 
 def _train_one_client(model, loader, epochs: int, lr: float, proximal_mu: float, local_in_keys: set[str], device):
