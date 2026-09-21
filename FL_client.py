@@ -18,9 +18,11 @@ from flwr.clientapp import ClientApp
 from flwr.common import ArrayRecord, Context, Message, MetricRecord, RecordDict
 from monai.inferers import sliding_window_inference
 from monai.losses import DiceCELoss
+from monai.utils import set_determinism
 
 from ML_model import build_model, instance_norm_state_keys
 from dataset import client_global_test_records, client_records, fets_region_metrics, make_global_test_loader, make_loaders, make_profile_loader
+from fedind_dar_strategy import TUMOR_BURDEN_BIN_EDGES
 
 app = ClientApp()
 
@@ -47,15 +49,9 @@ CLIENT_CSV_COLUMNS = [
     "proximal_mu",
 ]
 
-# Tumour burden is the foreground-volume ratio in a complete 3D MRI volume.
-# Uniform bins over [0, 1] place virtually every FeTS WT/TC/ET case in bin 0,
-# which makes EMD zero for all institutions. These fixed log-scale edges retain
-# privacy while separating small and large tumour burdens consistently at every
-# client. There are ten bins, matching fedind_dar_strategy.PROFILE_BINS.
-TUMOR_BURDEN_BIN_EDGES = np.asarray(
-    [0.0, 1e-6, 3e-6, 1e-5, 3e-5, 1e-4, 3e-4, 1e-3, 3e-3, 1e-2, np.inf],
-    dtype=np.float64,
-)
+def _set_client_determinism(context: Context, partition_index: int) -> None:
+    """Seed PyTorch, NumPy, Python, and MONAI transforms per institution."""
+    set_determinism(seed=int(context.run_config["seed"]) + partition_index)
 
 
 def _append_client_csv(context: Context, partition_index: int, row: dict) -> None:
@@ -176,6 +172,7 @@ def train(msg: Message, context: Context) -> Message:
     """Train the received global model on exactly one FeTS institution."""
     start_time = time.time()
     partition_index = int(context.node_config["partition-id"])
+    _set_client_determinism(context, partition_index)
     device = _device(context)
     model = build_model().to(device)
     model.load_state_dict(msg.content["arrays"].to_torch_state_dict())
@@ -239,6 +236,7 @@ def evaluate(msg: Message, context: Context) -> Message:
     """Evaluate the received global model on the client's held-out labelled cases."""
     start_time = time.time()
     partition_index = int(context.node_config["partition-id"])
+    _set_client_determinism(context, partition_index)
     device = _device(context)
     model = build_model().to(device)
     model.load_state_dict(msg.content["arrays"].to_torch_state_dict())

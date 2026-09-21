@@ -30,7 +30,9 @@ class SlidingWindowCollaboratorSelector:
     def _make_windows(self, client_ids: Sequence[int], cycle: int) -> list[list[int]]:
         ordered = list(sorted(client_ids))
         window_size = max(1, int(len(ordered) * self.fraction))
-        # The final short window is padded so each round selects the same count.
+        # The final short window is padded so every round selects the same count.
+        # With 33 clients and a six-client window, three clients repeat at the
+        # cycle boundary; this preserves the paper-style fixed participation size.
         padding = (-len(ordered)) % window_size
         if padding:
             ordered.extend(ordered[:padding])

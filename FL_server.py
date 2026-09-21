@@ -17,6 +17,7 @@ from flwr.common import ArrayRecord, ConfigRecord, Context
 from flwr.serverapp import Grid, ServerApp
 from monai.inferers import sliding_window_inference
 from monai.losses import DiceCELoss
+from monai.utils import set_determinism
 
 from ML_model import build_model
 from FL_methods import build_strategy
@@ -108,6 +109,7 @@ def merge_client_history_csv(output_dir: Path, strategy_name: str) -> None:
 @app.main()
 def main(grid: Grid, context: Context) -> None:
     config = context.run_config
+    set_determinism(seed=int(config["seed"]))
     num_clients = int(config["num-clients"])
     strategy_name = str(config["strategy"]).lower()
     strategy = build_strategy(strategy_name, config, num_clients)

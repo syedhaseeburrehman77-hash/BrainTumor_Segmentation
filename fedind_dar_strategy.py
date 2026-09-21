@@ -17,14 +17,26 @@ PROFILE_BINS = 10
 REGIONS = ("wt", "tc", "et")
 _EPS = 1e-12
 
+# Tumour burden is a volume fraction in [0, 1]. Finite edges allow EMD to
+# respect the unequal widths of these log-spaced bins.
+TUMOR_BURDEN_BIN_EDGES = np.asarray(
+    [0.0, 1e-6, 3e-6, 1e-5, 3e-5, 1e-4, 3e-4, 1e-3, 3e-3, 1e-2, 1.0],
+    dtype=np.float64,
+)
+
 
 def profile_metric_key(region: str, bin_index: int) -> str:
     return f"tumor-profile-{region}-{bin_index}"
 
 
 def _emd(histogram_a: np.ndarray, histogram_b: np.ndarray) -> float:
-    """1-D Earth Mover's Distance between equally spaced normalized histograms."""
-    return float(np.mean(np.abs(np.cumsum(histogram_a) - np.cumsum(histogram_b))))
+    """Normalized 1-D Wasserstein/EMD for the configured unequal-width bins."""
+    if histogram_a.shape != (PROFILE_BINS,) or histogram_b.shape != (PROFILE_BINS,):
+        raise ValueError(f"Expected {PROFILE_BINS}-bin tumour-burden histograms")
+    cumulative_difference = np.cumsum(histogram_a - histogram_b)[:-1]
+    bin_widths = np.diff(TUMOR_BURDEN_BIN_EDGES)
+    return float(np.sum(np.abs(cumulative_difference) * bin_widths) /
+                 (TUMOR_BURDEN_BIN_EDGES[-1] - TUMOR_BURDEN_BIN_EDGES[0]))
 
 
 class FedINDARStrategy(FedAvg):
