@@ -31,7 +31,9 @@ num-clients = 23
 num-server-rounds = 5
 local-epochs = 1
 batch-size = 1
-learning-rate = 0.0001
+# Previously this project used 1e-4. Use the RegSimAgg paper-aligned 5e-5
+# default so RegSimAgg and FedIN-EDAR can be compared under the same setting.
+learning-rate = 0.00005
 fraction-train = 1.0
 fraction-evaluate = 1.0
 # Fixed is the default. Sliding reproduces paper-style partial participation.
