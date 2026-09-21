@@ -30,13 +30,10 @@ def profile_metric_key(region: str, bin_index: int) -> str:
 
 
 def _emd(histogram_a: np.ndarray, histogram_b: np.ndarray) -> float:
-    """Normalized 1-D Wasserstein/EMD for the configured unequal-width bins."""
+    """1-D Earth Mover's Distance between normalized histograms on ordinal bins."""
     if histogram_a.shape != (PROFILE_BINS,) or histogram_b.shape != (PROFILE_BINS,):
         raise ValueError(f"Expected {PROFILE_BINS}-bin tumour-burden histograms")
-    cumulative_difference = np.cumsum(histogram_a - histogram_b)[:-1]
-    bin_widths = np.diff(TUMOR_BURDEN_BIN_EDGES)
-    return float(np.sum(np.abs(cumulative_difference) * bin_widths) /
-                 (TUMOR_BURDEN_BIN_EDGES[-1] - TUMOR_BURDEN_BIN_EDGES[0]))
+    return float(np.mean(np.abs(np.cumsum(histogram_a) - np.cumsum(histogram_b))))
 
 
 class FedINDARStrategy(FedAvg):
